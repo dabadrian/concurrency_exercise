@@ -5,156 +5,104 @@ import (
 	"compress/flate"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 	"time"
 )
 
-const chunkSize = 4096 // Tamaño del bloque en bytes
+// Función para comprimir datos usando Deflate (LZ77)
+func compressData(data []byte, workerID int, wg *sync.WaitGroup, resultChan chan float64) {
+	defer wg.Done()
 
-type Chunk struct {
-	Index int
-	Data  []byte
+	start := time.Now()
+
+	var buf bytes.Buffer
+	writer, _ := flate.NewWriter(&buf, flate.BestSpeed)
+	_, _ = writer.Write(data)
+	_ = writer.Close()
+
+	duration := time.Since(start).Seconds()
+	resultChan <- duration
 }
 
-type CompressedChunk struct {
-	Index int
-	Data  []byte
-}
-
-func readFileChunks(filePath string) ([]Chunk, error) {
-	file, err := os.Open(filePath)
+// Función para cargar un archivo BMP en memoria
+func loadBMP(filename string) ([]byte, error) {
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	var chunks []Chunk
-	index := 0
-
-	for {
-		buffer := make([]byte, chunkSize)
-		n, err := file.Read(buffer)
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-		if n == 0 {
-			break
-		}
-
-		chunks = append(chunks, Chunk{Index: index, Data: buffer[:n]})
-		index++
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, file)
+	if err != nil {
+		return nil, err
 	}
 
-	return chunks, nil
+	return buf.Bytes(), nil
 }
 
-func compressWorker(id int, wg *sync.WaitGroup, jobs <-chan Chunk, results chan<- CompressedChunk, times chan<- time.Duration) {
-	defer wg.Done()
+// Función para medir tiempo de ejecución con N workers y múltiples samples
+func measureExecutionTime(filename string, numWorkers int, numSamples int) (float64, float64) {
+	data, err := loadBMP(filename)
+	if err != nil {
+		fmt.Println("Error al cargar el archivo BMP:", err)
+		return 0, 0
+	}
 
-	for chunk := range jobs {
+	var times []float64
+	for i := 0; i < numSamples; i++ {
 		start := time.Now()
 
-		var buf bytes.Buffer
-		writer, err := flate.NewWriter(&buf, flate.BestCompression)
-		if err != nil {
-			fmt.Println("Error creando el escritor de compresión:", err)
-			continue
+		var wg sync.WaitGroup
+		resultChan := make(chan float64, numWorkers)
+
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go compressData(data, w, &wg, resultChan)
 		}
 
-		_, err = writer.Write(chunk.Data)
-		if err != nil {
-			fmt.Println("Error al comprimir el chunk:", err)
-			continue
+		wg.Wait()
+		close(resultChan)
+
+		var totalDuration float64
+		for t := range resultChan {
+			totalDuration += t
 		}
 
-		writer.Close()
-		results <- CompressedChunk{Index: chunk.Index, Data: buf.Bytes()}
-
-		// Guardar tiempo de compresión
-		times <- time.Since(start)
+		duration := time.Since(start).Seconds()
+		times = append(times, duration)
 	}
+
+	mean, stddev := calculateStats(times)
+	return mean, stddev
 }
 
-func writeCompressedFile(outputPath string, compressedChunks []CompressedChunk) error {
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return err
+// Función para calcular media y desviación estándar
+func calculateStats(data []float64) (mean float64, stddev float64) {
+	sum := 0.0
+	for _, v := range data {
+		sum += v
 	}
-	defer file.Close()
+	mean = sum / float64(len(data))
 
-	for _, chunk := range compressedChunks {
-		_, err := file.Write(chunk.Data)
-		if err != nil {
-			return err
-		}
+	var varianceSum float64
+	for _, v := range data {
+		varianceSum += (v - mean) * (v - mean)
 	}
-
-	return nil
+	stddev = math.Sqrt(varianceSum / float64(len(data)))
+	return
 }
 
 func main() {
-	inputFile := "sample.bmp"
-	outputFile := "output.deflate"
-	numWorkers := 16 // Parametrización del número de workers
+	filename := "sample.bmp"             // Archivo sample.bmp
+	numSamples := 32                     // Número de repeticiones por experimento
+	workersList := []int{1, 2, 4, 8, 16} // Diferentes números de workers
 
-	startTime := time.Now()
-
-	// Leer archivo en chunks
-	chunks, err := readFileChunks(inputFile)
-	if err != nil {
-		fmt.Println("Error al leer el archivo:", err)
-		return
+	fmt.Println("Experimento de concurrencia: Medición de tiempos")
+	for _, workers := range workersList {
+		mean, stddev := measureExecutionTime(filename, workers, numSamples)
+		fmt.Printf("Workers: %d | Tiempo medio: %.4f seg | Desviación estándar: %.4f\n", workers, mean, stddev)
 	}
-
-	// Canales para comunicación
-	jobs := make(chan Chunk, len(chunks))
-	results := make(chan CompressedChunk, len(chunks))
-	times := make(chan time.Duration, len(chunks))
-
-	// WaitGroup para sincronización
-	var wg sync.WaitGroup
-
-	// Iniciar goroutines de compresión
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go compressWorker(i, &wg, jobs, results, times)
-	}
-
-	// Enviar chunks a los workers
-	for _, chunk := range chunks {
-		jobs <- chunk
-	}
-	close(jobs)
-
-	// Esperar a que terminen los workers
-	wg.Wait()
-	close(results)
-	close(times)
-
-	// Recoger resultados en orden
-	compressedChunks := make([]CompressedChunk, 0, len(chunks))
-	var totalTime time.Duration
-
-	for compressedChunk := range results {
-		compressedChunks = append(compressedChunks, compressedChunk)
-	}
-	for t := range times {
-		totalTime += t
-	}
-
-	// Escribir archivo comprimido
-	err = writeCompressedFile(outputFile, compressedChunks)
-	if err != nil {
-		fmt.Println("Error al escribir el archivo comprimido:", err)
-		return
-	}
-
-	elapsed := time.Since(startTime)
-
-	fmt.Println("Compresión completada.")
-	fmt.Println("Archivo guardado en:", outputFile)
-	fmt.Printf("Tiempo total de compresión: %v\n", elapsed)
-	fmt.Printf("Tiempo promedio por bloque: %v\n", totalTime/time.Duration(len(chunks)))
-	fmt.Printf("Número de goroutines usadas: %d\n", numWorkers)
 }
