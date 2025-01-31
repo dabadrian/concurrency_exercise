@@ -1,7 +1,7 @@
 # Ejercicios de Concurrencia con Go y Java
 
 ## Lenguaje Go
-Este repositorio contiene tres ejercicios que exploran el uso de concurrencia en Go para distintas aplicaciones: compresión de imágenes y multiplicación de matrices. Se presentan diferentes niveles de optimización para entender el impacto de la concurrencia en el rendimiento:  
+Este repositorio contiene tres ejercicios que exploran el uso de concurrencia en Go para las siguientes aplicaciones: Compresión de archivos y multiplicación de matrices. Se presentan diferentes niveles de optimización para entender el impacto de la concurrencia en el rendimiento:  
 
 ### 1. Instalación del ambiente para go
 
