@@ -1,9 +1,14 @@
 # Ejercicios de Concurrencia con Go y Java
 
 ## Lenguaje Go
-ParaEste repositorio contiene tres ejercicios que exploran el uso de concurrencia en Go para distintas aplicaciones: compresión de imágenes y multiplicación de matrices. Se presentan diferentes niveles de optimización para entender el impacto de la concurrencia en el rendimiento:  
+Este repositorio contiene tres ejercicios que exploran el uso de concurrencia en Go para distintas aplicaciones: compresión de imágenes y multiplicación de matrices. Se presentan diferentes niveles de optimización para entender el impacto de la concurrencia en el rendimiento:  
 
-### 1. go-compression-workers
+### 1. Instalación del ambiente para go
+
+- Descargar Go: https://go.dev/dl/
+- Clonar el proyecto y abrirlo en un editor de código fuente como visual studio code.
+
+### 2. go-compression-workers
 
 #### Descripción:
 Ejercicio de compresión de imágenes BMP utilizando concurrencia, pero sin demostrar una mejora significativa en rendimiento debido a la naturaleza del procesamiento.
@@ -14,7 +19,7 @@ cd go-compression-workers
 go run main.go
 ```
 
-### 2. go-matrix-concurrency
+### 3. go-matrix-concurrency
 #### Descripción:
 Ejercicio de multiplicación de matrices utilizando concurrencia, donde cada celda de la matriz resultante se computa en una goroutine separada. Sin embargo, la sobrecarga de comunicación y sincronización no permite observar beneficios claros.
 
@@ -29,7 +34,7 @@ go run main.go
 - Uso intensivo de canales para recolección de resultados.
 - No se aprovecha la localidad de caché.
 
-### 2. go-matrix-concurrency-optimized
+### 4. go-matrix-concurrency-optimized
 #### Descripción:
 Optimización del ejercicio anterior, mejorando el uso de concurrencia mediante el procesamiento por bloques en lugar de celdas individuales. Se reduce la sobrecarga y se mejora el acceso a memoria.
 
