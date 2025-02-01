@@ -1,95 +1,70 @@
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.zip.DeflaterOutputStream;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
+import javax.imageio.ImageIO;
 
-public class ParallelCompression {
-    private static final String[] FILES = {
-        "../images/random_noise_512x512.bmp",
-        "../images/random_noise_1024x1024.bmp",
-        "../images/random_noise_2048x2048.bmp"
-    };
-    private static final int[] WORKERS_LIST = {1, 2, 4, 8};
-    private static final int NUM_SAMPLES = 32;
-    private static final Lock lock = new ReentrantLock();
+public class LZ77Java {
 
-    public static void main(String[] args) {
-        System.out.println("Experimento de concurrencia: Medición de tiempos en Java");
-        for (String filename : FILES) {
-            System.out.println("Procesando: " + filename);
-            for (int workers : WORKERS_LIST) {
-                double[] results = measureExecutionTime(filename, workers, NUM_SAMPLES);
-                System.out.printf("Workers: %d | Tiempo medio: %.4f seg | Desviación estándar: %.4f\n", workers, results[0], results[1]);
+    public static void lz77Compress(byte[] data, int workerID, byte[][] results, Object lock) throws InterruptedException {
+        // Simulación de compresión LZ77
+        Thread.sleep(data.length / 100);
+        synchronized (lock) {
+            results[workerID] = data; // En un caso real, esto sería la salida comprimida
+        }
+    }
+
+    public static void compressBMP(String filePath, int numWorkers) throws IOException, InterruptedException {
+        BufferedImage img = ImageIO.read(new File(filePath));
+        int width = img.getWidth();
+        int height = img.getHeight();
+        byte[] pixelData = new byte[width * height * 3];
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int rgb = img.getRGB(x, y);
+                pixelData[(y * width + x) * 3] = (byte) ((rgb >> 16) & 0xFF);
+                pixelData[(y * width + x) * 3 + 1] = (byte) ((rgb >> 8) & 0xFF);
+                pixelData[(y * width + x) * 3 + 2] = (byte) (rgb & 0xFF);
             }
-            System.out.println();
+        }
+
+        byte[][] results = new byte[numWorkers][];
+        Object lock = new Object();
+
+        Thread[] threads = new Thread[numWorkers];
+        for (int i = 0; i < numWorkers; i++) {
+            final int workerID = i; // Hacemos una variable final
+            final int start = workerID * pixelData.length / numWorkers;
+            final int end = (workerID + 1) * pixelData.length / numWorkers;
+            final byte[] segment = Arrays.copyOfRange(pixelData, start, end);
+
+            threads[i] = new Thread(() -> {
+                try {
+                    lz77Compress(segment, workerID, results, lock);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            });
+
+            threads[i].start();
+        }
+
+        for (Thread thread : threads) {
+            thread.join();
         }
     }
 
-    private static double[] measureExecutionTime(String filename, int numWorkers, int numSamples) {
-        byte[] data = loadBMP(filename);
-        if (data == null) return new double[]{0, 0};
-        
-        List<Double> times = new ArrayList<>();
-        
-        for (int i = 0; i < numSamples; i++) {
-            long start = System.nanoTime();
-            List<Thread> threads = new ArrayList<>();
-            List<Double> durations = new ArrayList<>();
-            
-            for (int w = 0; w < numWorkers; w++) {
-                Thread thread = new Thread(() -> {
-                    long tStart = System.nanoTime();
-                    compressData(data);
-                    double duration = (System.nanoTime() - tStart) / 1e9;
-                    lock.lock();
-                    try { durations.add(duration); }
-                    finally { lock.unlock(); }
-                });
-                threads.add(thread);
-                thread.start();
+    public static void main(String[] args) throws IOException, InterruptedException {
+        String[] imageFiles = {"random_512.bmp", "random_1024.bmp", "random_2048.bmp"};
+        int[] numWorkersList = {4, 8};
+
+        for (String filePath : imageFiles) {
+            for (int numWorkers : numWorkersList) {
+                long startTime = System.currentTimeMillis();
+                compressBMP(filePath, numWorkers);
+                System.out.println("Tiempo de ejecución para " + filePath + " con " + numWorkers + " workers: " + (System.currentTimeMillis() - startTime) + " ms");
             }
-            
-            for (Thread thread : threads) {
-                try { thread.join(); } catch (InterruptedException e) { e.printStackTrace(); }
-            }
-            
-            double totalDuration = durations.stream().mapToDouble(Double::doubleValue).sum();
-            double elapsedTime = (System.nanoTime() - start) / 1e9;
-            times.add(elapsedTime);
         }
-        
-        return calculateStats(times);
-    }
-
-    private static byte[] loadBMP(String filename) {
-        try {
-            return Files.readAllBytes(Paths.get(filename));
-        } catch (IOException e) {
-            System.out.println("Error al cargar el archivo: " + filename);
-            return null;
-        }
-    }
-
-    private static void compressData(byte[] data) {
-        try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-             DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(byteArrayOutputStream)) {
-            deflaterOutputStream.write(data);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static double[] calculateStats(List<Double> times) {
-        double sum = times.stream().mapToDouble(Double::doubleValue).sum();
-        double mean = sum / times.size();
-        
-        double varianceSum = times.stream().mapToDouble(t -> Math.pow(t - mean, 2)).sum();
-        double stddev = Math.sqrt(varianceSum / times.size());
-        
-        return new double[]{mean, stddev};
     }
 }
