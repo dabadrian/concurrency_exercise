@@ -1,52 +1,81 @@
-# Ejercicios de Concurrencia con Go y Java
+# Comparación de Compresión Concurrente en Go y Java
 
 ## Lenguaje Go
-Este repositorio contiene tres ejercicios que exploran el uso de concurrencia en Go para las siguientes aplicaciones: Compresión de archivos y multiplicación de matrices. Se presentan diferentes niveles de optimización para entender el impacto de la concurrencia en el rendimiento:  
+Este repositorio contiene dos implementaciones para evaluar el rendimiento de compresión de imágenes BMP usando múltiples hilos de ejecución. Se han implementado versiones en Go y Java para comparar su desempeño en entornos concurrentes.
 
-### 1. Instalación del ambiente para go
+Cada implementación:
 
-- Descargar Go: https://go.dev/dl/
+- Carga un archivo BMP en memoria.
+
+- Utiliza múltiples hilos (workers) para comprimir los datos con el algoritmo Deflate (LZ77).
+
+- Mide el tiempo de ejecución para diferentes cantidades de hilos.
+
+- Calcula la media y desviación estándar de los tiempos de ejecución.
+
+### 1. Requisitos
+
 - Clonar el proyecto y abrirlo en un editor de código fuente como visual studio code.
 
-### 2. go-compression-workers
+#### Para Go
 
-#### Descripción:
-Ejercicio de compresión de imágenes BMP utilizando concurrencia, pero sin demostrar una mejora significativa en rendimiento debido a la naturaleza del procesamiento.
+- Instalar Go: https://go.dev/dl/
 
-####  Ejecución:
+- Asegurarse de que los archivos BMP estén en ../images/
+
+#### Para Java
+
+- Instalar JDK 17+
+
+- Configurar JAVA_HOME en las variables de entorno
+
+- Asegurarse de que los archivos BMP estén en ../images/
+
+
+
+### 2. Ejecución
+
+#### Go
+
 ```code
-cd go-compression-workers
+cd go-concurrency-lz77
 go run main.go
 ```
 
-### 3. go-matrix-concurrency
-#### Descripción:
-Ejercicio de multiplicación de matrices utilizando concurrencia, donde cada celda de la matriz resultante se computa en una goroutine separada. Sin embargo, la sobrecarga de comunicación y sincronización no permite observar beneficios claros.
+#### Java
 
-####  Ejecución:
 ```code
-cd go-matrix-concurrency
-go run main.go
+cd java-concurrency-lz77
+javac ParallelCompression.java
+java ParallelCompression
 ```
-####  Diferencias clave respecto a la versión optimizada:
-- Cada celda de la matriz resultado se calcula individualmente en una tarea separada.
-- Alta sobrecarga en la gestión de tareas y comunicación entre goroutines.
-- Uso intensivo de canales para recolección de resultados.
-- No se aprovecha la localidad de caché.
 
-### 4. go-matrix-concurrency-optimized
-#### Descripción:
-Optimización del ejercicio anterior, mejorando el uso de concurrencia mediante el procesamiento por bloques en lugar de celdas individuales. Se reduce la sobrecarga y se mejora el acceso a memoria.
 
-####  Ejecución:
-```code
-cd go-matrix-concurrency-optimized
-go run main.go
-```
-####  Mejoras respecto a la versión anterior:
+### 3. Arquitectura de las Implementaciones
 
-- Se procesan bloques de la matriz en lugar de celdas individuales.
-- Menor comunicación entre goroutines y reducción del uso de canales.
-- Mejor aprovechamiento de caché y menor latencia en memoria.
-- Reducción de sobrecarga en la gestión de tareas.
+#### Go
 
+- Usa sync.WaitGroup para la sincronización de hilos.
+
+- Utiliza canales (chan) para recolectar los tiempos de ejecución de cada worker.
+
+- Mide el tiempo total por iteración y luego calcula la media y desviación estándar.
+
+#### Java
+
+- Usa Thread y ReentrantLock para la sincronización.
+
+- Almacena los tiempos en una List<Double> protegida por un lock.
+
+- Mide el tiempo total por iteración y calcula estadísticas.
+
+### 4. Resultados y Comparación
+Ambas implementaciones ejecutan los mismos experimentos:
+
+- Archivos BMP: 512x512, 1024x1024, 2048x2048.
+
+- Workers: 1, 2, 4, 8, 16.
+
+- Número de muestras por prueba: 32.
+
+Se recomienda analizar los tiempos de ejecución para evaluar las diferencias entre los modelos de concurrencia de Go y Java.
